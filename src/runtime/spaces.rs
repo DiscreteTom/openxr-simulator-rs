@@ -4,12 +4,15 @@ use openxr_sys::Handle;
 
 pub(super) unsafe extern "system" fn xrLocateViews(
     _session: xr::Session,
-    _locate_info: *const xr::ViewLocateInfo,
+    locate_info: *const xr::ViewLocateInfo,
     view_state: *mut xr::ViewState,
     capacity: u32,
     count: *mut u32,
     views: *mut xr::View,
 ) -> xr::Result {
+    if locate_info.is_null() {
+        return VALIDATION_FAILURE;
+    }
     if !count.is_null() {
         unsafe { *count = 2 };
     }
@@ -27,22 +30,24 @@ pub(super) unsafe extern "system" fn xrLocateViews(
     }
     let settings = config::snapshot();
     let state = lock_runtime();
+    let requested_space = unsafe { (*locate_info).space };
+    let Some(base) = state.spaces.get(&requested_space.into_raw()) else {
+        return HANDLE_INVALID;
+    };
+    let base_world = space_world_pose(&state, base.kind);
     let fov = math::symmetric_fov(
         settings.fov.horizontal_degrees,
         settings.fov.vertical_degrees,
     );
+    let head_world = state.head_pose();
     for eye in 0..capacity.min(2) as usize {
+        let eye_world =
+            math::pose_compose(head_world, math::eye_offset(eye, settings.fov.ipd_meters));
         unsafe {
             *views.add(eye) = xr::View {
                 ty: xr::StructureType::VIEW,
                 next: ptr::null_mut(),
-                pose: math::eye_pose(
-                    eye,
-                    state.head.yaw,
-                    state.head.pitch,
-                    state.head.position,
-                    settings.fov.ipd_meters,
-                ),
+                pose: math::pose_relative(eye_world, base_world),
                 fov,
             };
         }
@@ -132,7 +137,7 @@ pub(super) unsafe extern "system" fn xrCreateActionSpace(
 
 pub(super) unsafe extern "system" fn xrLocateSpace(
     space: xr::Space,
-    _base_space: xr::Space,
+    base_space: xr::Space,
     _time: xr::Time,
     location: *mut xr::SpaceLocation,
 ) -> xr::Result {
@@ -143,13 +148,40 @@ pub(super) unsafe extern "system" fn xrLocateSpace(
     let Some(data) = state.spaces.get(&space.into_raw()) else {
         return HANDLE_INVALID;
     };
+    let Some(base) = state.spaces.get(&base_space.into_raw()) else {
+        return HANDLE_INVALID;
+    };
     let flags = xr::SpaceLocationFlags::POSITION_VALID
         | xr::SpaceLocationFlags::ORIENTATION_VALID
         | xr::SpaceLocationFlags::POSITION_TRACKED
         | xr::SpaceLocationFlags::ORIENTATION_TRACKED;
-    let pose = match data.kind {
+    let pose = math::pose_relative(
+        space_world_pose(&state, data.kind),
+        space_world_pose(&state, base.kind),
+    );
+    unsafe {
+        *location = xr::SpaceLocation {
+            ty: xr::StructureType::SPACE_LOCATION,
+            next: ptr::null_mut(),
+            location_flags: flags,
+            pose,
+        };
+    }
+    SUCCESS
+}
+
+fn space_world_pose(state: &RuntimeState, kind: SpaceKind) -> xr::Posef {
+    match kind {
         SpaceKind::View => state.head_pose(),
-        SpaceKind::Local | SpaceKind::Stage => xr::Posef::IDENTITY,
+        SpaceKind::Stage => xr::Posef::IDENTITY,
+        SpaceKind::Local => xr::Posef {
+            orientation: xr::Quaternionf::IDENTITY,
+            position: xr::Vector3f {
+                x: 0.0,
+                y: SIMULATED_EYE_HEIGHT,
+                z: 0.0,
+            },
+        },
         SpaceKind::Controller { hand, pose } => {
             let lateral = if hand == 0 { -0.18 } else { 0.18 };
             let offset = math::rotate_xz(
@@ -166,14 +198,45 @@ pub(super) unsafe extern "system" fn xrLocateSpace(
             result.position.z += offset.z;
             result
         }
-    };
-    unsafe {
-        *location = xr::SpaceLocation {
-            ty: xr::StructureType::SPACE_LOCATION,
-            next: ptr::null_mut(),
-            location_flags: flags,
-            pose,
-        };
     }
-    SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn view_space_contains_only_eye_offsets() {
+        let mut state = RuntimeState::new();
+        state.head.position = Vec3::new(0.4, 1.7, -0.2);
+        state.head.yaw = 0.7;
+        state.head.pitch = -0.15;
+        let head = space_world_pose(&state, SpaceKind::View);
+        let eye = math::pose_compose(head, math::eye_offset(1, 0.064));
+        let relative = math::pose_relative(eye, head);
+        assert!((relative.position.x - 0.032).abs() < 1e-5);
+        assert!(relative.position.y.abs() < 1e-5);
+        assert!(relative.position.z.abs() < 1e-5);
+        assert!((relative.orientation.w - 1.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn local_space_origin_is_at_initial_head_height() {
+        let state = RuntimeState::new();
+        let stage = space_world_pose(&state, SpaceKind::Stage);
+        let local = space_world_pose(&state, SpaceKind::Local);
+        let relative = math::pose_relative(local, stage);
+        assert!((relative.position.y - SIMULATED_EYE_HEIGHT).abs() < 1e-5);
+    }
+
+    #[test]
+    fn view_located_from_local_starts_at_the_origin() {
+        let state = RuntimeState::new();
+        let view = space_world_pose(&state, SpaceKind::View);
+        let local = space_world_pose(&state, SpaceKind::Local);
+        let relative = math::pose_relative(view, local);
+        assert!(relative.position.x.abs() < 1e-5);
+        assert!(relative.position.y.abs() < 1e-5);
+        assert!(relative.position.z.abs() < 1e-5);
+    }
 }

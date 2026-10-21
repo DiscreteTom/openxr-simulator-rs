@@ -32,6 +32,8 @@ const EXTENSIONS: &[&str] = &[
     "XR_KHR_composition_layer_depth",
 ];
 
+const SIMULATED_EYE_HEIGHT: f32 = 1.7;
+
 const SUCCESS: xr::Result = xr::Result::SUCCESS;
 const VALIDATION_FAILURE: xr::Result = xr::Result::ERROR_VALIDATION_FAILURE;
 const FUNCTION_UNSUPPORTED: xr::Result = xr::Result::ERROR_FUNCTION_UNSUPPORTED;
@@ -73,7 +75,7 @@ struct HeadState {
 impl Default for HeadState {
     fn default() -> Self {
         Self {
-            position: Vec3::new(0.0, 1.7, 0.0),
+            position: Vec3::new(0.0, SIMULATED_EYE_HEIGHT, 0.0),
             yaw: 0.0,
             pitch: 0.0,
             last_input: Instant::now(),
@@ -197,7 +199,7 @@ impl RuntimeState {
     }
 
     fn reset_pose(&mut self) {
-        self.head.position = Vec3::new(0.0, 1.7, 0.0);
+        self.head.position = Vec3::new(0.0, SIMULATED_EYE_HEIGHT, 0.0);
         self.head.yaw = 0.0;
         self.head.pitch = 0.0;
     }

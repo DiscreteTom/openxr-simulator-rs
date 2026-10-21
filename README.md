@@ -225,6 +225,12 @@ any directory containing an OpenXR loader can be used.
 5. Mouse movement updates head yaw and pitch; movement keys update head position.
 6. `xrLocateViews` returns the configured eye poses and FOV.
 
+Reference-space coordinates follow the OpenXR conventions:
+
+- `STAGE` is floor-aligned; the simulated eye starts at `y = 1.7 m`
+- `LOCAL` is anchored at the initial head pose, so the head starts at the origin
+- `VIEW` is head-centered; per-eye poses contain only the half-IPD lateral offset
+
 The primary preview path stays on the application's D3D11 queue and performs no
 CPU pixel copies. A CPU readback path remains as a fallback when a GPU preview
 swapchain cannot be created.
