@@ -10,15 +10,20 @@ use windows::Win32::Graphics::Gdi::{
     StretchDIBits, TRANSPARENT,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_ESCAPE, VK_F5};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    GetAsyncKeyState, ReleaseCapture, SetCapture, VK_ESCAPE, VK_F5,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
     AdjustWindowRect, AppendMenuW, CheckMenuRadioItem, CreateMenu, CreateWindowExW, DefWindowProcW,
-    DestroyWindow, DispatchMessageW, GetClientRect, GetCursorPos, GetForegroundWindow, IDC_ARROW,
-    IsWindow, LoadCursorW, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, MSG, PM_REMOVE,
-    PeekMessageW, RegisterClassW, SW_SHOW, SetCursor, SetCursorPos, SetForegroundWindow,
-    ShowWindow, TranslateMessage, UnregisterClassW, WINDOW_EX_STYLE, WM_ACTIVATE, WM_ACTIVATEAPP,
-    WM_CLOSE, WM_COMMAND, WM_DESTROY, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_PAINT,
-    WM_RBUTTONDOWN, WM_SETCURSOR, WM_SIZE, WNDCLASSW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+    DestroyWindow, DispatchMessageW, GetClientRect, GetCursorPos, GetForegroundWindow,
+    GetWindowRect, HTBOTTOM, HTBOTTOMLEFT, HTBOTTOMRIGHT, HTLEFT, HTRIGHT, HTTOP, HTTOPLEFT,
+    HTTOPRIGHT, IDC_ARROW, IsWindow, LoadCursorW, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING,
+    MSG, PM_REMOVE, PeekMessageW, RegisterClassW, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER, SetCursor,
+    SetCursorPos, SetForegroundWindow, SetWindowPos, ShowWindow, TranslateMessage,
+    UnregisterClassW, WINDOW_EX_STYLE, WM_ACTIVATE, WM_ACTIVATEAPP, WM_CAPTURECHANGED, WM_CLOSE,
+    WM_COMMAND, WM_DESTROY, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
+    WM_NCLBUTTONDOWN, WM_PAINT, WM_RBUTTONDOWN, WM_SETCURSOR, WM_SIZE, WNDCLASSW,
+    WS_OVERLAPPEDWINDOW, WS_VISIBLE,
 };
 use windows::core::{PCWSTR, w};
 

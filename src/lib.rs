@@ -1,5 +1,6 @@
 #![cfg(windows)]
 
+mod aspect;
 mod config;
 mod d3d11;
 mod d3d11_preview;

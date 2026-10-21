@@ -25,6 +25,7 @@ use windows::Win32::Graphics::Dxgi::{
 };
 use windows::core::{Interface, PCSTR};
 
+use crate::aspect;
 use crate::config::ViewMode;
 use crate::window;
 
@@ -155,7 +156,18 @@ impl Preview {
             deferred.PSSetConstantBuffers(0, Some(&[Some(self.constant_buffer.clone())]));
         }
 
-        let viewports = layout_viewports(width, height, selected.len(), mode);
+        let (source_width, source_height) = selected
+            .first()
+            .map(|eye| eye.content_size())
+            .unwrap_or((1.0, 1.0));
+        let viewports = layout_viewports(
+            width,
+            height,
+            selected.len(),
+            mode,
+            source_width,
+            source_height,
+        );
         for (index, eye) in selected.iter().enumerate() {
             let Some(viewport) = viewports.get(index) else {
                 continue;
@@ -201,6 +213,19 @@ pub struct EyeFrame<'a> {
 }
 
 impl EyeFrame<'_> {
+    fn content_size(&self) -> (f32, f32) {
+        let mut desc = D3D11_TEXTURE2D_DESC::default();
+        unsafe { self.texture.GetDesc(&mut desc) };
+        if self.image_rect.extent.width > 0 && self.image_rect.extent.height > 0 {
+            (
+                self.image_rect.extent.width as f32,
+                self.image_rect.extent.height as f32,
+            )
+        } else {
+            (desc.Width as f32, desc.Height as f32)
+        }
+    }
+
     fn uv_rect(&self) -> [f32; 4] {
         let mut desc = D3D11_TEXTURE2D_DESC::default();
         unsafe { self.texture.GetDesc(&mut desc) };
@@ -394,33 +419,46 @@ fn is_srgb_texture(texture: &ID3D11Texture2D) -> bool {
     )
 }
 
-fn layout_viewports(width: u32, height: u32, count: usize, mode: ViewMode) -> Vec<D3D11_VIEWPORT> {
+fn layout_viewports(
+    width: u32,
+    height: u32,
+    count: usize,
+    mode: ViewMode,
+    source_width: f32,
+    source_height: f32,
+) -> Vec<D3D11_VIEWPORT> {
+    let content_width = if mode == ViewMode::Stereo && count >= 2 {
+        source_width * 2.0
+    } else {
+        source_width
+    };
+    let fitted = aspect::fit_rect(content_width, source_height, width as f32, height as f32);
     if mode == ViewMode::Stereo && count >= 2 {
-        let half = width as f32 * 0.5;
+        let half = fitted.width * 0.5;
         vec![
             D3D11_VIEWPORT {
-                TopLeftX: 0.0,
-                TopLeftY: 0.0,
+                TopLeftX: fitted.x,
+                TopLeftY: fitted.y,
                 Width: half,
-                Height: height as f32,
+                Height: fitted.height,
                 MinDepth: 0.0,
                 MaxDepth: 1.0,
             },
             D3D11_VIEWPORT {
-                TopLeftX: half,
-                TopLeftY: 0.0,
+                TopLeftX: fitted.x + half,
+                TopLeftY: fitted.y,
                 Width: half,
-                Height: height as f32,
+                Height: fitted.height,
                 MinDepth: 0.0,
                 MaxDepth: 1.0,
             },
         ]
     } else {
         vec![D3D11_VIEWPORT {
-            TopLeftX: 0.0,
-            TopLeftY: 0.0,
-            Width: width as f32,
-            Height: height as f32,
+            TopLeftX: fitted.x,
+            TopLeftY: fitted.y,
+            Width: fitted.width,
+            Height: fitted.height,
             MinDepth: 0.0,
             MaxDepth: 1.0,
         }]
@@ -433,16 +471,21 @@ mod tests {
 
     #[test]
     fn stereo_viewports_split_the_client_area() {
-        let viewports = layout_viewports(1000, 600, 2, ViewMode::Stereo);
+        let viewports = layout_viewports(1000, 600, 2, ViewMode::Stereo, 1000.0, 1000.0);
         assert_eq!(viewports.len(), 2);
+        assert_eq!(viewports[0].TopLeftX, 0.0);
+        assert_eq!(viewports[0].TopLeftY, 50.0);
+        assert_eq!(viewports[0].Width, 500.0);
+        assert_eq!(viewports[0].Height, 500.0);
         assert_eq!(viewports[1].TopLeftX, 500.0);
-        assert_eq!(viewports[1].Width, 500.0);
     }
 
     #[test]
-    fn single_eye_uses_full_client_area() {
-        let viewports = layout_viewports(1000, 600, 1, ViewMode::LeftEye);
-        assert_eq!(viewports[0].Width, 1000.0);
+    fn single_eye_keeps_its_aspect_ratio() {
+        let viewports = layout_viewports(1000, 600, 1, ViewMode::LeftEye, 1000.0, 2000.0);
+        assert_eq!(viewports[0].TopLeftX, 350.0);
+        assert_eq!(viewports[0].TopLeftY, 0.0);
+        assert_eq!(viewports[0].Width, 300.0);
         assert_eq!(viewports[0].Height, 600.0);
     }
 }

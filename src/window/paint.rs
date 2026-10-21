@@ -1,5 +1,7 @@
 use super::*;
 
+use crate::aspect;
+
 pub(super) unsafe fn paint_frame(dc: windows::Win32::Graphics::Gdi::HDC) {
     let mut client = RECT::default();
     let handle = hwnd();
@@ -32,13 +34,23 @@ pub(super) unsafe fn paint_frame(dc: windows::Win32::Graphics::Gdi::HDC) {
             },
             ..Default::default()
         };
+        let fitted = aspect::fit_rect(
+            frame.width as f32,
+            frame.height as f32,
+            width as f32,
+            height as f32,
+        );
+        let destination_x = fitted.x.round() as i32;
+        let destination_y = fitted.y.round() as i32;
+        let destination_width = fitted.width.round().max(1.0) as i32;
+        let destination_height = fitted.height.round().max(1.0) as i32;
         unsafe {
             StretchDIBits(
                 dc,
-                0,
-                0,
-                width,
-                height,
+                destination_x,
+                destination_y,
+                destination_width,
+                destination_height,
                 0,
                 0,
                 frame.width as i32,

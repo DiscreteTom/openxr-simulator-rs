@@ -17,6 +17,7 @@ desktop window during `xrEndFrame`.
 - Runtime-owned swapchains, including left/right slices with `arraySize = 2`
 - GPU preview rendering directly from the application's D3D11 eye textures
 - Desktop preview modes: stereo side-by-side, left eye only and right eye only
+- Aspect-ratio-preserving preview with live resizing and letterboxing or pillarboxing
 - FPS-style mouse look
 - WASD movement, Q/E down/up and Shift speed boost
 - Automatic mouse capture and release
