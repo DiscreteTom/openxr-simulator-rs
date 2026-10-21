@@ -16,7 +16,12 @@ use crate::d3d11_preview;
 use crate::math::{self, Vec3};
 use crate::window;
 
+use controller::{
+    ControlTarget, ControllerSim, control_target_for_modifiers, controller_hand_for_modifiers,
+};
+
 mod actions;
+mod controller;
 mod dispatch;
 mod instance;
 mod presentation;
@@ -128,6 +133,7 @@ enum RuntimeEvent {
 #[derive(Debug)]
 struct ActionData {
     name: String,
+    hands: [bool; 2],
 }
 
 struct RuntimeState {
@@ -144,6 +150,8 @@ struct RuntimeState {
     suggested_profiles: Vec<xr::Path>,
     active_profile: xr::Path,
     head: HeadState,
+    controllers: [ControllerSim; 2],
+    control_target: ControlTarget,
     next_frame: Instant,
     last_mirror: Option<Instant>,
     fps_window_start: Instant,
@@ -169,6 +177,8 @@ impl RuntimeState {
             suggested_profiles: Vec::new(),
             active_profile: xr::Path::NULL,
             head: HeadState::default(),
+            controllers: [ControllerSim::new(0), ControllerSim::new(1)],
+            control_target: ControlTarget::Head,
             next_frame: now,
             last_mirror: None,
             fps_window_start: now,
@@ -202,6 +212,8 @@ impl RuntimeState {
         self.head.position = Vec3::new(0.0, SIMULATED_EYE_HEIGHT, 0.0);
         self.head.yaw = 0.0;
         self.head.pitch = 0.0;
+        self.controllers[0].reset(0);
+        self.controllers[1].reset(1);
     }
 
     fn update_input(&mut self) {
@@ -240,25 +252,10 @@ impl RuntimeState {
         let delta = (now - self.head.last_input).as_secs_f32().clamp(0.0, 0.05);
         self.head.last_input = now;
 
-        let (dx, dy) = window::consume_mouse_delta();
-        if dx != 0.0 || dy != 0.0 {
-            let sensitivity = settings
-                .movement
-                .mouse_sensitivity_degrees_per_pixel
-                .to_radians();
-            self.head.yaw -= dx * sensitivity;
-            let pitch_direction = if settings.movement.invert_y {
-                1.0
-            } else {
-                -1.0
-            };
-            self.head.pitch += dy * sensitivity * pitch_direction;
-            self.head.pitch = self
-                .head
-                .pitch
-                .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
-        }
+        self.controllers[0].sample_bindings(&settings.controller.left);
+        self.controllers[1].sample_bindings(&settings.controller.right);
 
+        let (dx, dy) = window::consume_mouse_delta();
         let down = |key: &str| config::virtual_key(key).is_some_and(window::key_down);
         let mut local = Vec3::default();
         if down(&settings.keys.forward) {
@@ -278,18 +275,71 @@ impl RuntimeState {
             local.x /= length;
             local.z /= length;
         }
-        let rotated = math::rotate_xz(self.head.yaw, local);
-        let mut speed = settings.movement.speed_meters_per_second;
-        if down(&settings.keys.fast) {
-            speed *= settings.movement.fast_multiplier;
-        }
-        self.head.position.x += rotated.x * speed * delta;
-        self.head.position.z += rotated.z * speed * delta;
-        if down(&settings.keys.up) {
-            self.head.position.y += speed * delta;
-        }
-        if down(&settings.keys.down) {
-            self.head.position.y -= speed * delta;
+
+        let left_modifier = down(&settings.controller.left_modifier);
+        let right_modifier = down(&settings.controller.right_modifier);
+        self.control_target = control_target_for_modifiers(left_modifier, right_modifier);
+        if let Some(hand) = controller_hand_for_modifiers(left_modifier, right_modifier) {
+            let mut speed = settings.controller.move_speed_meters_per_second;
+            if down(&settings.keys.fast) {
+                speed *= settings.movement.fast_multiplier;
+            }
+            let controller = &mut self.controllers[hand];
+            controller.position.x += local.x * speed * delta;
+            controller.position.z += local.z * speed * delta;
+            if down(&settings.keys.up) {
+                controller.position.y += speed * delta;
+            }
+            if down(&settings.keys.down) {
+                controller.position.y -= speed * delta;
+            }
+            if dx != 0.0 || dy != 0.0 {
+                let sensitivity = settings
+                    .controller
+                    .mouse_sensitivity_degrees_per_pixel
+                    .to_radians();
+                controller.yaw -= dx * sensitivity;
+                let pitch_direction = if settings.controller.invert_y {
+                    1.0
+                } else {
+                    -1.0
+                };
+                controller.pitch += dy * sensitivity * pitch_direction;
+                controller.pitch = controller
+                    .pitch
+                    .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
+            }
+        } else {
+            if dx != 0.0 || dy != 0.0 {
+                let sensitivity = settings
+                    .movement
+                    .mouse_sensitivity_degrees_per_pixel
+                    .to_radians();
+                self.head.yaw -= dx * sensitivity;
+                let pitch_direction = if settings.movement.invert_y {
+                    1.0
+                } else {
+                    -1.0
+                };
+                self.head.pitch += dy * sensitivity * pitch_direction;
+                self.head.pitch = self
+                    .head
+                    .pitch
+                    .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
+            }
+            let rotated = math::rotate_xz(self.head.yaw, local);
+            let mut speed = settings.movement.speed_meters_per_second;
+            if down(&settings.keys.fast) {
+                speed *= settings.movement.fast_multiplier;
+            }
+            self.head.position.x += rotated.x * speed * delta;
+            self.head.position.z += rotated.z * speed * delta;
+            if down(&settings.keys.up) {
+                self.head.position.y += speed * delta;
+            }
+            if down(&settings.keys.down) {
+                self.head.position.y -= speed * delta;
+            }
         }
     }
 
@@ -313,6 +363,7 @@ impl RuntimeState {
                 settings.fov.horizontal_degrees,
                 settings.fov.vertical_degrees,
                 settings.fov.ipd_meters,
+                self.control_target.label(),
             );
             self.last_title = Instant::now();
         }

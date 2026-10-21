@@ -307,15 +307,16 @@ pub fn publish_composite(eyes: &[(&[u8], u32, u32)], mode: ViewMode) {
     });
 }
 
-pub fn update_title(frame_fps: f32, mode: ViewMode, hfov: f32, vfov: f32, ipd: f32) {
+pub fn update_title(frame_fps: f32, mode: ViewMode, hfov: f32, vfov: f32, ipd: f32, control: &str) {
     let handle = hwnd();
     if handle.is_invalid() {
         return;
     }
     let title = format!(
-        "OpenXR Simulator  |  {:.1} FPS  |  {}  |  FOV {:.0} x {:.0}  |  IPD {:.1} mm  |  Esc releases mouse",
+        "OpenXR Simulator  |  {:.1} FPS  |  {}  |  {}  |  FOV {:.0} x {:.0}  |  IPD {:.1} mm  |  Esc releases mouse",
         frame_fps,
         mode.label(),
+        control,
         hfov,
         vfov,
         ipd * 1000.0

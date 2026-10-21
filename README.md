@@ -19,7 +19,8 @@ desktop window during `xrEndFrame`.
 - Desktop preview modes: stereo side-by-side, left eye only and right eye only
 - Aspect-ratio-preserving preview with live resizing and letterboxing or pillarboxing
 - FPS-style mouse look
-- WASD movement, Q/E down/up and Shift speed boost
+- WASD head movement, Space/Left Ctrl up/down and Caps Lock speed boost
+- Configurable two-hand controller emulation with poses, triggers, grips, buttons and thumbsticks
 - Automatic mouse capture and release
 - Persistent key bindings, mouse sensitivity, movement speed, FOV, IPD and render resolution
 - Live FOV, IPD and eye-mode controls from the window menu
@@ -74,9 +75,11 @@ that backup when it exists.
 | Action | Default binding |
 | --- | --- |
 | Look around | Mouse |
-| Move | W / S / A / D |
-| Move up / down | E / Q |
-| Move faster | Left Shift |
+| Move head | W / S / A / D |
+| Move head up / down | Space / Left Ctrl |
+| Move faster | Caps Lock |
+| Control left controller | Hold Left Shift |
+| Control right controller | Hold Right Shift |
 | Reset pose | R |
 | Cycle eye view | F6 |
 | Reload settings | F5 |
@@ -86,6 +89,29 @@ that backup when it exists.
 The **View** menu selects stereo, left-eye or right-eye preview. The
 **FOV / IPD** menu adjusts horizontal FOV, vertical FOV and interpupillary
 distance.
+
+Without a controller modifier, the mouse and movement keys control the head.
+Hold Left Shift to control the left controller with the same mouse and movement
+keys. Hold Right Shift to control the right controller. If both modifiers are
+held, the left controller wins.
+
+Controller buttons are always active, independent of the movement modifier:
+
+| Controller input | Left controller | Right controller |
+| --- | --- | --- |
+| Trigger | F | J |
+| Grip / squeeze | G | K |
+| Menu | M | N |
+| System | T | Y |
+| Primary face button | Z (X) | B (A) |
+| Secondary face button | X (Y) | H (B) |
+| Thumbstick click | V | L |
+| Thumbstick up / down | Up / Down | Numpad8 / Numpad2 |
+| Thumbstick left / right | Left / Right | Numpad4 / Numpad6 |
+
+Keyboard triggers and grips are binary, so their analog value is either `0.0`
+or `1.0`. Thumbstick values are normalized to `-1.0..=1.0`. Every binding can be
+changed in `settings.json`.
 
 Mouse capture is active by default. Press Esc to release it before using the
 menu with the mouse. Input is accepted only while a window from the current
@@ -132,20 +158,53 @@ at `packaging\settings.example.json` and is copied to the release archive as
     "backward": "S",
     "strafe_left": "A",
     "strafe_right": "D",
-    "up": "E",
-    "down": "Q",
-    "fast": "LShift",
+    "up": "Space",
+    "down": "LCtrl",
+    "fast": "CapsLock",
     "reset_pose": "R",
     "cycle_eye": "F6",
     "reload_config": "F5"
+  },
+  "controller": {
+    "left_modifier": "LShift",
+    "right_modifier": "RShift",
+    "move_speed_meters_per_second": 1.0,
+    "mouse_sensitivity_degrees_per_pixel": 0.18,
+    "invert_y": false,
+    "left": {
+      "trigger": "F",
+      "grip": "G",
+      "menu": "M",
+      "system": "T",
+      "primary": "Z",
+      "secondary": "X",
+      "stick_click": "V",
+      "stick_up": "Up",
+      "stick_down": "Down",
+      "stick_left": "Left",
+      "stick_right": "Right"
+    },
+    "right": {
+      "trigger": "J",
+      "grip": "K",
+      "menu": "N",
+      "system": "Y",
+      "primary": "B",
+      "secondary": "H",
+      "stick_click": "L",
+      "stick_up": "Numpad8",
+      "stick_down": "Numpad2",
+      "stick_left": "Numpad4",
+      "stick_right": "Numpad6"
+    }
   }
 }
 ```
 
 Key names are case-insensitive. Supported names include single letters and
 digits, `Space`, `Tab`, `Escape`, arrow keys, `PageUp`, `PageDown`, `F1` through
-`F24`, `LShift`/`RShift`, `LCtrl`/`RCtrl`, `LAlt`/`RAlt`, and
-`MouseLeft`/`MouseRight`/`MouseMiddle`.
+`F24`, `Numpad0` through `Numpad9`, `LShift`/`RShift`, `LCtrl`/`RCtrl`,
+`LAlt`/`RAlt`, and `MouseLeft`/`MouseRight`/`MouseMiddle`.
 
 Press F5 after editing the settings. `render_width` and `render_height` are the
 recommended per-eye render dimensions. Restart the OpenXR application after

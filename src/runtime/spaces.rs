@@ -183,20 +183,8 @@ fn space_world_pose(state: &RuntimeState, kind: SpaceKind) -> xr::Posef {
             },
         },
         SpaceKind::Controller { hand, pose } => {
-            let lateral = if hand == 0 { -0.18 } else { 0.18 };
-            let offset = math::rotate_xz(
-                state.head.yaw,
-                Vec3::new(
-                    lateral + pose.position.x,
-                    pose.position.y - 0.28,
-                    pose.position.z,
-                ),
-            );
-            let mut result = state.head_pose();
-            result.position.x += offset.x;
-            result.position.y += offset.y;
-            result.position.z += offset.z;
-            result
+            let controller = state.controllers[hand as usize].world_pose(state.head_pose());
+            math::pose_compose(controller, pose)
         }
     }
 }

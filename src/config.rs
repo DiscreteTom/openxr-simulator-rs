@@ -137,13 +137,103 @@ impl Default for KeyBindings {
             backward: "S".into(),
             strafe_left: "A".into(),
             strafe_right: "D".into(),
-            up: "E".into(),
-            down: "Q".into(),
-            fast: "LShift".into(),
+            up: "Space".into(),
+            down: "LCtrl".into(),
+            fast: "CapsLock".into(),
             reset_pose: "R".into(),
             cycle_eye: "F6".into(),
             reload_config: "F5".into(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ControllerBindings {
+    pub trigger: String,
+    pub grip: String,
+    pub menu: String,
+    pub system: String,
+    pub primary: String,
+    pub secondary: String,
+    pub stick_click: String,
+    pub stick_up: String,
+    pub stick_down: String,
+    pub stick_left: String,
+    pub stick_right: String,
+}
+
+impl ControllerBindings {
+    pub fn left() -> Self {
+        Self {
+            trigger: "F".into(),
+            grip: "G".into(),
+            menu: "M".into(),
+            system: "T".into(),
+            primary: "Z".into(),
+            secondary: "X".into(),
+            stick_click: "V".into(),
+            stick_up: "Up".into(),
+            stick_down: "Down".into(),
+            stick_left: "Left".into(),
+            stick_right: "Right".into(),
+        }
+    }
+
+    pub fn right() -> Self {
+        Self {
+            trigger: "J".into(),
+            grip: "K".into(),
+            menu: "N".into(),
+            system: "Y".into(),
+            primary: "B".into(),
+            secondary: "H".into(),
+            stick_click: "L".into(),
+            stick_up: "Numpad8".into(),
+            stick_down: "Numpad2".into(),
+            stick_left: "Numpad4".into(),
+            stick_right: "Numpad6".into(),
+        }
+    }
+}
+
+impl Default for ControllerBindings {
+    fn default() -> Self {
+        Self::left()
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ControllerSettings {
+    pub left_modifier: String,
+    pub right_modifier: String,
+    pub move_speed_meters_per_second: f32,
+    pub mouse_sensitivity_degrees_per_pixel: f32,
+    pub invert_y: bool,
+    pub left: ControllerBindings,
+    pub right: ControllerBindings,
+}
+
+impl Default for ControllerSettings {
+    fn default() -> Self {
+        Self {
+            left_modifier: "LShift".into(),
+            right_modifier: "RShift".into(),
+            move_speed_meters_per_second: 1.0,
+            mouse_sensitivity_degrees_per_pixel: 0.18,
+            invert_y: false,
+            left: ControllerBindings::left(),
+            right: ControllerBindings::right(),
+        }
+    }
+}
+
+impl ControllerSettings {
+    pub fn sanitize(&mut self) {
+        self.move_speed_meters_per_second = self.move_speed_meters_per_second.clamp(0.1, 10.0);
+        self.mouse_sensitivity_degrees_per_pixel =
+            self.mouse_sensitivity_degrees_per_pixel.clamp(0.01, 2.0);
     }
 }
 
@@ -155,6 +245,7 @@ pub struct Settings {
     pub fov: FovSettings,
     pub movement: MovementSettings,
     pub keys: KeyBindings,
+    pub controller: ControllerSettings,
 }
 
 impl Default for Settings {
@@ -165,6 +256,7 @@ impl Default for Settings {
             fov: FovSettings::default(),
             movement: MovementSettings::default(),
             keys: KeyBindings::default(),
+            controller: ControllerSettings::default(),
         }
     }
 }
@@ -181,6 +273,17 @@ impl Settings {
         };
         self.fov.sanitize();
         self.movement.sanitize();
+        self.controller.sanitize();
+        let left_modifier = virtual_key(&self.controller.left_modifier);
+        let right_modifier = virtual_key(&self.controller.right_modifier);
+        let fast = virtual_key(&self.keys.fast);
+        let up = virtual_key(&self.keys.up);
+        let down = virtual_key(&self.keys.down);
+        if fast.is_some()
+            && (fast == left_modifier || fast == right_modifier || fast == up || fast == down)
+        {
+            self.keys.fast = "CapsLock".into();
+        }
     }
 }
 
@@ -282,6 +385,23 @@ pub fn virtual_key(name: &str) -> Option<u16> {
         if byte.is_ascii_alphanumeric() {
             return Some(byte as u16);
         }
+        let punctuation = match byte {
+            b';' => 0xBA,
+            b'=' => 0xBB,
+            b',' => 0xBC,
+            b'-' => 0xBD,
+            b'.' => 0xBE,
+            b'/' => 0xBF,
+            b'`' => 0xC0,
+            b'[' => 0xDB,
+            b'\\' => 0xDC,
+            b']' => 0xDD,
+            b'\'' => 0xDE,
+            _ => 0,
+        };
+        if punctuation != 0 {
+            return Some(punctuation);
+        }
     }
 
     let value = match normalized.as_str() {
@@ -309,6 +429,22 @@ pub fn virtual_key(name: &str) -> Option<u16> {
         "mouseleft" | "lmb" => 0x01,
         "mouseright" | "rmb" => 0x02,
         "mousemiddle" | "mmb" => 0x04,
+        "numpad0" => 0x60,
+        "numpad1" => 0x61,
+        "numpad2" => 0x62,
+        "numpad3" => 0x63,
+        "numpad4" => 0x64,
+        "numpad5" => 0x65,
+        "numpad6" => 0x66,
+        "numpad7" => 0x67,
+        "numpad8" => 0x68,
+        "numpad9" => 0x69,
+        "numpadmultiply" => 0x6A,
+        "numpadadd" => 0x6B,
+        "numpadsubtract" => 0x6D,
+        "numpaddecimal" => 0x6E,
+        "numpaddivide" => 0x6F,
+        "capslock" => 0x14,
         _ if normalized.starts_with('f') => {
             let number = normalized[1..].parse::<u16>().ok()?;
             if (1..=24).contains(&number) {
@@ -331,6 +467,8 @@ mod tests {
         assert_eq!(virtual_key("w"), Some(0x57));
         assert_eq!(virtual_key("Left Shift"), Some(0xA0));
         assert_eq!(virtual_key("F12"), Some(0x7B));
+        assert_eq!(virtual_key("Numpad8"), Some(0x68));
+        assert_eq!(virtual_key("CapsLock"), Some(0x14));
         assert_eq!(virtual_key("not-a-key"), None);
     }
 
@@ -342,5 +480,14 @@ mod tests {
         settings.sanitize();
         assert_eq!(settings.display.render_width, 256);
         assert_eq!(settings.fov.horizontal_degrees, 150.0);
+    }
+
+    #[test]
+    fn movement_speed_key_cannot_shadow_controller_modifiers() {
+        let mut settings = Settings::default();
+        settings.controller.left_modifier = "F8".into();
+        settings.keys.fast = "F8".into();
+        settings.sanitize();
+        assert_eq!(settings.keys.fast, "CapsLock");
     }
 }

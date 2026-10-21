@@ -25,11 +25,44 @@
     "backward": "S",
     "strafe_left": "A",
     "strafe_right": "D",
-    "up": "E",
-    "down": "Q",
-    "fast": "LShift",
+    "up": "Space",
+    "down": "LCtrl",
+    "fast": "CapsLock",
     "reset_pose": "R",
     "cycle_eye": "F6",
     "reload_config": "F5"
+  },
+  "controller": {
+    "left_modifier": "LShift",
+    "right_modifier": "RShift",
+    "move_speed_meters_per_second": 1.0,
+    "mouse_sensitivity_degrees_per_pixel": 0.18,
+    "invert_y": false,
+    "left": {
+      "trigger": "F",
+      "grip": "G",
+      "menu": "M",
+      "system": "T",
+      "primary": "Z",
+      "secondary": "X",
+      "stick_click": "V",
+      "stick_up": "Up",
+      "stick_down": "Down",
+      "stick_left": "Left",
+      "stick_right": "Right"
+    },
+    "right": {
+      "trigger": "J",
+      "grip": "K",
+      "menu": "N",
+      "system": "Y",
+      "primary": "B",
+      "secondary": "H",
+      "stick_click": "L",
+      "stick_up": "Numpad8",
+      "stick_down": "Numpad2",
+      "stick_left": "Numpad4",
+      "stick_right": "Numpad6"
+    }
   }
 }

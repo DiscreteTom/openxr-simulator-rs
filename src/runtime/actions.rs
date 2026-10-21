@@ -35,8 +35,27 @@ pub(super) unsafe extern "system" fn xrCreateAction(
     let info = unsafe { &*create_info };
     let name = fixed_string(&info.action_name);
     let mut state = lock_runtime();
+    let mut hands = [false, false];
+    if info.count_subaction_paths > 0 && !info.subaction_paths.is_null() {
+        for index in 0..info.count_subaction_paths {
+            let path = unsafe { *info.subaction_paths.add(index as usize) };
+            if let Some(text) = state.paths.get(&path.into_raw()) {
+                if text.contains("/left") {
+                    hands[0] = true;
+                }
+                if text.contains("/right") {
+                    hands[1] = true;
+                }
+            }
+        }
+    }
+    if !hands[0] && !hands[1] {
+        hands = [true, true];
+    }
     let handle = xr::Action::from_raw(state.allocate_handle());
-    state.actions.insert(handle.into_raw(), ActionData { name });
+    state
+        .actions
+        .insert(handle.into_raw(), ActionData { name, hands });
     unsafe { *action = handle };
     SUCCESS
 }
@@ -95,21 +114,13 @@ pub(super) unsafe extern "system" fn xrGetActionStateBoolean(
         return VALIDATION_FAILURE;
     }
     let state = lock_runtime();
-    let name = state
-        .actions
-        .get(&unsafe { (*get_info).action }.into_raw())
+    let get_info = unsafe { &*get_info };
+    let action = state.actions.get(&get_info.action.into_raw());
+    let name = action
         .map(|action| action.name.to_ascii_lowercase())
         .unwrap_or_default();
-    let pressed = if action_name_matches(&name, "trigger")
-        || action_name_matches(&name, "select")
-        || action_name_matches(&name, "fire")
-    {
-        window::key_down(0x01)
-    } else if action_name_matches(&name, "grip") || action_name_matches(&name, "squeeze") {
-        window::key_down(0x02)
-    } else {
-        false
-    };
+    let hand = action_hand(&state, action, get_info.subaction_path, &name);
+    let pressed = state.controllers[hand].boolean_state(&name);
     unsafe {
         *value = xr::ActionStateBoolean {
             ty: xr::StructureType::ACTION_STATE_BOOLEAN,
@@ -132,18 +143,13 @@ pub(super) unsafe extern "system" fn xrGetActionStateFloat(
         return VALIDATION_FAILURE;
     }
     let state = lock_runtime();
-    let name = state
-        .actions
-        .get(&unsafe { (*get_info).action }.into_raw())
+    let get_info = unsafe { &*get_info };
+    let action = state.actions.get(&get_info.action.into_raw());
+    let name = action
         .map(|action| action.name.to_ascii_lowercase())
         .unwrap_or_default();
-    let amount = if (action_name_matches(&name, "trigger") || action_name_matches(&name, "select"))
-        && window::key_down(0x01)
-    {
-        1.0
-    } else {
-        0.0
-    };
+    let hand = action_hand(&state, action, get_info.subaction_path, &name);
+    let amount = state.controllers[hand].float_state(&name).unwrap_or(0.0);
     unsafe {
         *value = xr::ActionStateFloat {
             ty: xr::StructureType::ACTION_STATE_FLOAT,
@@ -177,23 +183,69 @@ pub(super) unsafe extern "system" fn xrGetActionStatePose(
 
 pub(super) unsafe extern "system" fn xrGetActionStateVector2f(
     _session: xr::Session,
-    _get_info: *const xr::ActionStateGetInfo,
+    get_info: *const xr::ActionStateGetInfo,
     value: *mut xr::ActionStateVector2f,
 ) -> xr::Result {
-    if value.is_null() {
+    if get_info.is_null() || value.is_null() {
         return VALIDATION_FAILURE;
     }
+    let state = lock_runtime();
+    let get_info = unsafe { &*get_info };
+    let action = state.actions.get(&get_info.action.into_raw());
+    let name = action
+        .map(|action| action.name.to_ascii_lowercase())
+        .unwrap_or_default();
+    let hand = action_hand(&state, action, get_info.subaction_path, &name);
+    let current =
+        if action_name_matches(&name, "thumbstick") || action_name_matches(&name, "joystick") {
+            state.controllers[hand].thumbstick
+        } else {
+            xr::Vector2f { x: 0.0, y: 0.0 }
+        };
     unsafe {
         *value = xr::ActionStateVector2f {
             ty: xr::StructureType::ACTION_STATE_VECTOR2F,
             next: ptr::null_mut(),
-            current_state: xr::Vector2f { x: 0.0, y: 0.0 },
+            current_state: current,
             changed_since_last_sync: xr::FALSE,
             last_change_time: xr::Time::from_nanos(now_ns()),
             is_active: xr::TRUE,
         };
     }
     SUCCESS
+}
+
+fn action_hand(
+    state: &RuntimeState,
+    action: Option<&ActionData>,
+    subaction_path: xr::Path,
+    name: &str,
+) -> usize {
+    if action_name_matches(name, "button_x") || action_name_matches(name, "button_y") {
+        return 0;
+    }
+    if action_name_matches(name, "button_a") || action_name_matches(name, "button_b") {
+        return 1;
+    }
+    if subaction_path != xr::Path::NULL
+        && let Some(path) = state.paths.get(&subaction_path.into_raw())
+    {
+        if path.contains("/left") {
+            return 0;
+        }
+        if path.contains("/right") {
+            return 1;
+        }
+    }
+    if let Some(action) = action {
+        if action.hands[0] && !action.hands[1] {
+            return 0;
+        }
+        if action.hands[1] && !action.hands[0] {
+            return 1;
+        }
+    }
+    1
 }
 
 pub(super) unsafe extern "system" fn xrSyncActions(
