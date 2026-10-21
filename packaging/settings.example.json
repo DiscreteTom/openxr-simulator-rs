@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "display": {
+    "view_mode": "stereo",
+    "window_width": 1280,
+    "window_height": 720,
+    "mirror_rate_hz": 90,
+    "render_width": 1280,
+    "render_height": 1408
+  },
+  "fov": {
+    "horizontal_degrees": 100.0,
+    "vertical_degrees": 96.0,
+    "ipd_meters": 0.064
+  },
+  "movement": {
+    "speed_meters_per_second": 3.0,
+    "fast_multiplier": 4.0,
+    "mouse_sensitivity_degrees_per_pixel": 0.12,
+    "invert_y": false,
+    "capture_mouse_on_start": true
+  },
+  "keys": {
+    "forward": "W",
+    "backward": "S",
+    "strafe_left": "A",
+    "strafe_right": "D",
+    "up": "E",
+    "down": "Q",
+    "fast": "LShift",
+    "reset_pose": "R",
+    "cycle_eye": "F6",
+    "reload_config": "F5"
+  }
+}
