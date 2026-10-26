@@ -10,6 +10,7 @@ use windows::Win32::Graphics::Gdi::{
     StretchDIBits, TRANSPARENT,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::UI::Input::Ime::{HIMC, ISC_SHOWUICOMPOSITIONWINDOW, ImmAssociateContext};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, ReleaseCapture, SetCapture, VK_ESCAPE, VK_F5,
 };
@@ -21,9 +22,9 @@ use windows::Win32::UI::WindowsAndMessaging::{
     MSG, PM_REMOVE, PeekMessageW, RegisterClassW, SW_SHOW, SWP_NOACTIVATE, SWP_NOZORDER, SetCursor,
     SetCursorPos, SetForegroundWindow, SetWindowPos, ShowWindow, TranslateMessage,
     UnregisterClassW, WINDOW_EX_STYLE, WM_ACTIVATE, WM_ACTIVATEAPP, WM_CAPTURECHANGED, WM_CLOSE,
-    WM_COMMAND, WM_DESTROY, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN, WM_LBUTTONUP, WM_MOUSEMOVE,
-    WM_NCLBUTTONDOWN, WM_PAINT, WM_RBUTTONDOWN, WM_SETCURSOR, WM_SIZE, WNDCLASSW,
-    WS_OVERLAPPEDWINDOW, WS_VISIBLE,
+    WM_COMMAND, WM_DESTROY, WM_IME_SETCONTEXT, WM_KEYDOWN, WM_KILLFOCUS, WM_LBUTTONDOWN,
+    WM_LBUTTONUP, WM_MOUSEMOVE, WM_NCLBUTTONDOWN, WM_PAINT, WM_RBUTTONDOWN, WM_SETCURSOR, WM_SIZE,
+    WNDCLASSW, WS_OVERLAPPEDWINDOW, WS_VISIBLE,
 };
 use windows::core::{PCWSTR, w};
 
@@ -54,6 +55,7 @@ const ID_RELOAD_CONFIG: u32 = 1023;
 const ID_OPEN_CONFIG_FILE: u32 = 1024;
 
 static WINDOW_HANDLE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
+static PREVIOUS_IME_CONTEXT: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static MENU_HANDLE: AtomicPtr<c_void> = AtomicPtr::new(ptr::null_mut());
 static CLASS_REGISTERED: AtomicBool = AtomicBool::new(false);
 static MOUSE_CAPTURED: AtomicBool = AtomicBool::new(false);
@@ -126,6 +128,20 @@ fn center_cursor() {
     }
 }
 
+fn disable_ime(hwnd: HWND) {
+    let previous = unsafe { ImmAssociateContext(hwnd, HIMC::default()) };
+    PREVIOUS_IME_CONTEXT.store(previous.0, Ordering::Release);
+}
+
+fn restore_ime(hwnd: HWND) {
+    let previous = PREVIOUS_IME_CONTEXT.swap(ptr::null_mut(), Ordering::AcqRel);
+    if !previous.is_null() {
+        unsafe {
+            ImmAssociateContext(hwnd, HIMC(previous));
+        }
+    }
+}
+
 /// Returns `(dx, dy)` since the previous call and re-centres the cursor while
 /// mouse capture is enabled. The first sample after capture is always zero.
 pub fn consume_mouse_delta() -> (f32, f32) {
@@ -144,7 +160,6 @@ pub fn consume_mouse_delta() -> (f32, f32) {
                 Some(&mut pid),
             );
             if pid != std::process::id() {
-                set_mouse_capture(false);
                 return (0.0, 0.0);
             }
         }
@@ -227,6 +242,7 @@ pub fn create() -> Result<(), String> {
 
         WINDOW_HANDLE.store(handle.0, Ordering::Release);
         MENU_HANDLE.store(menu.0, Ordering::Release);
+        disable_ime(handle);
         let _ = ShowWindow(handle, SW_SHOW);
         let _ = SetForegroundWindow(handle);
         sync_menu_checks();
@@ -243,6 +259,7 @@ pub fn destroy() {
     set_mouse_capture(false);
     WINDOW_HANDLE.store(ptr::null_mut(), Ordering::Release);
     unsafe {
+        restore_ime(handle);
         let _ = DestroyWindow(handle);
         if CLASS_REGISTERED.swap(false, Ordering::AcqRel)
             && let Ok(instance) = GetModuleHandleW(None)

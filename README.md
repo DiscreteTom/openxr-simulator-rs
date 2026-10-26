@@ -116,7 +116,11 @@ changed in `settings.json`.
 Mouse capture is active by default. Press Esc to release it before using the
 menu with the mouse. Input is accepted only while a window from the current
 process is in the foreground, so switching to a browser or editor does not
-continue moving the simulated head.
+continue moving the simulated head. Moving focus between the preview and the
+host application's own windows pauses and resumes mouse input without clearing
+the capture state; only Esc or the menu releases it. The preview window disables
+IME/input method composition, so holding Shift for controller control is never
+consumed by the active input method.
 
 ## Configuration
 

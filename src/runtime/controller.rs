@@ -151,6 +151,29 @@ pub(super) fn control_target_for_modifiers(left: bool, right: bool) -> ControlTa
     }
 }
 
+pub(super) fn apply_mouse_look(
+    target: ControlTarget,
+    head: &mut HeadState,
+    controllers: &mut [ControllerSim; 2],
+    dx: f32,
+    dy: f32,
+    sensitivity: f32,
+    invert_y: bool,
+) {
+    if dx == 0.0 && dy == 0.0 {
+        return;
+    }
+    let pitch_direction = if invert_y { 1.0 } else { -1.0 };
+    let (yaw, pitch) = match target {
+        ControlTarget::Head => (&mut head.yaw, &mut head.pitch),
+        ControlTarget::Left => (&mut controllers[0].yaw, &mut controllers[0].pitch),
+        ControlTarget::Right => (&mut controllers[1].yaw, &mut controllers[1].pitch),
+    };
+    *yaw -= dx * sensitivity;
+    *pitch += dy * sensitivity * pitch_direction;
+    *pitch = pitch.clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -186,5 +209,39 @@ mod tests {
             control_target_for_modifiers(true, false),
             ControlTarget::Left
         );
+    }
+
+    #[test]
+    fn mouse_look_rotates_only_the_controller_selected_by_shift() {
+        let mut head = HeadState::default();
+        let mut controllers = [ControllerSim::new(0), ControllerSim::new(1)];
+        let sensitivity = 0.1;
+
+        apply_mouse_look(
+            control_target_for_modifiers(true, false),
+            &mut head,
+            &mut controllers,
+            10.0,
+            0.2,
+            sensitivity,
+            false,
+        );
+        assert!((controllers[0].yaw + 1.0).abs() < 1e-5);
+        assert!((controllers[0].pitch + 0.02).abs() < 1e-5);
+        assert_eq!(controllers[1].yaw, 0.0);
+        assert_eq!(head.yaw, 0.0);
+
+        apply_mouse_look(
+            control_target_for_modifiers(false, true),
+            &mut head,
+            &mut controllers,
+            10.0,
+            0.2,
+            sensitivity,
+            false,
+        );
+        assert!((controllers[1].yaw + 1.0).abs() < 1e-5);
+        assert!((controllers[1].pitch + 0.02).abs() < 1e-5);
+        assert_eq!(head.yaw, 0.0);
     }
 }

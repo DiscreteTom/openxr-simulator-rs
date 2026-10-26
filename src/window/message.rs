@@ -164,6 +164,10 @@ fn resized_window_rect(start: RECT, edge: ResizeEdge, dx: i32, dy: i32) -> RECT 
     result
 }
 
+fn suppress_ime_ui(lparam: isize) -> isize {
+    lparam & !(ISC_SHOWUICOMPOSITIONWINDOW as isize)
+}
+
 pub(super) unsafe extern "system" fn wnd_proc(
     hwnd: HWND,
     message: u32,
@@ -228,15 +232,16 @@ pub(super) unsafe extern "system" fn wnd_proc(
                 if resizing() {
                     finish_resize();
                 }
-                set_mouse_capture(false);
+                // The host game can focus its own window while the preview
+                // remains the intended mouse-capture surface.
                 DefWindowProcW(hwnd, message, wparam, lparam)
             }
-            WM_ACTIVATE | WM_ACTIVATEAPP => {
-                let active = (wparam.0 & 0xffff) != 0;
-                if !active {
-                    set_mouse_capture(false);
-                }
-                DefWindowProcW(hwnd, message, wparam, lparam)
+            // Mouse sampling is gated by the foreground process in
+            // consume_mouse_delta; focus changes only pause it. Esc and the
+            // menu are the explicit ways to clear the capture preference.
+            WM_ACTIVATE | WM_ACTIVATEAPP => DefWindowProcW(hwnd, message, wparam, lparam),
+            WM_IME_SETCONTEXT => {
+                DefWindowProcW(hwnd, message, wparam, LPARAM(suppress_ime_ui(lparam.0)))
             }
             WM_SETCURSOR => {
                 if mouse_captured() {
@@ -306,5 +311,12 @@ mod tests {
         assert_eq!(resized.top, start.bottom - MIN_WINDOW_HEIGHT);
         assert_eq!(resized.right, start.right);
         assert_eq!(resized.bottom, start.bottom);
+    }
+
+    #[test]
+    fn ime_ui_is_suppressed_without_changing_other_context_flags() {
+        let other_flags = 0x1234;
+        let lparam = (ISC_SHOWUICOMPOSITIONWINDOW | other_flags) as isize;
+        assert_eq!(suppress_ime_ui(lparam), other_flags as isize);
     }
 }

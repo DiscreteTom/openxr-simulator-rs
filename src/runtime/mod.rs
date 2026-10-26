@@ -17,7 +17,8 @@ use crate::math::{self, Vec3};
 use crate::window;
 
 use controller::{
-    ControlTarget, ControllerSim, control_target_for_modifiers, controller_hand_for_modifiers,
+    ControlTarget, ControllerSim, apply_mouse_look, control_target_for_modifiers,
+    controller_hand_for_modifiers,
 };
 
 mod actions;
@@ -279,6 +280,25 @@ impl RuntimeState {
         let left_modifier = down(&settings.controller.left_modifier);
         let right_modifier = down(&settings.controller.right_modifier);
         self.control_target = control_target_for_modifiers(left_modifier, right_modifier);
+        let (look_sensitivity, look_invert_y) = match self.control_target {
+            ControlTarget::Head => (
+                settings.movement.mouse_sensitivity_degrees_per_pixel,
+                settings.movement.invert_y,
+            ),
+            ControlTarget::Left | ControlTarget::Right => (
+                settings.controller.mouse_sensitivity_degrees_per_pixel,
+                settings.controller.invert_y,
+            ),
+        };
+        apply_mouse_look(
+            self.control_target,
+            &mut self.head,
+            &mut self.controllers,
+            dx,
+            dy,
+            look_sensitivity.to_radians(),
+            look_invert_y,
+        );
         if let Some(hand) = controller_hand_for_modifiers(left_modifier, right_modifier) {
             let mut speed = settings.controller.move_speed_meters_per_second;
             if down(&settings.keys.fast) {
@@ -293,40 +313,7 @@ impl RuntimeState {
             if down(&settings.keys.down) {
                 controller.position.y -= speed * delta;
             }
-            if dx != 0.0 || dy != 0.0 {
-                let sensitivity = settings
-                    .controller
-                    .mouse_sensitivity_degrees_per_pixel
-                    .to_radians();
-                controller.yaw -= dx * sensitivity;
-                let pitch_direction = if settings.controller.invert_y {
-                    1.0
-                } else {
-                    -1.0
-                };
-                controller.pitch += dy * sensitivity * pitch_direction;
-                controller.pitch = controller
-                    .pitch
-                    .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
-            }
         } else {
-            if dx != 0.0 || dy != 0.0 {
-                let sensitivity = settings
-                    .movement
-                    .mouse_sensitivity_degrees_per_pixel
-                    .to_radians();
-                self.head.yaw -= dx * sensitivity;
-                let pitch_direction = if settings.movement.invert_y {
-                    1.0
-                } else {
-                    -1.0
-                };
-                self.head.pitch += dy * sensitivity * pitch_direction;
-                self.head.pitch = self
-                    .head
-                    .pitch
-                    .clamp(-89.0_f32.to_radians(), 89.0_f32.to_radians());
-            }
             let rotated = math::rotate_xz(self.head.yaw, local);
             let mut speed = settings.movement.speed_meters_per_second;
             if down(&settings.keys.fast) {
